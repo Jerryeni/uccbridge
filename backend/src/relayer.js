@@ -154,30 +154,50 @@ class BridgeRelayer {
       }
 
       logger.info('Processing BSC deposit', {
-        user,
+        bscUser: user,
         amount: ethers.formatUnits(amount, 6),
         depositId: depositIdStr,
         destinationAddress,
-        txHash: event.transactionHash
+        bscTxHash: event.transactionHash
       });
 
-      // Call mint on UC Bridge
-      const tx = await this.ucBridge.mint(user, amount, depositId);
-      logger.info('Mint transaction sent', { txHash: tx.hash });
+      // Call mint on UC Bridge with destinationAddress (not user)
+      // The UC Bridge contract expects: mint(address user, uint256 amount, bytes32 depositId)
+      // We need to pass the destinationAddress as the user parameter
+      const tx = await this.ucBridge.mint(destinationAddress, amount, depositId);
+      logger.info('Mint transaction sent to UC Chain', { 
+        ucTxHash: tx.hash,
+        recipient: destinationAddress,
+        amount: ethers.formatUnits(amount, 6),
+        depositId: depositIdStr
+      });
 
       const receipt = await tx.wait();
-      logger.info('Mint transaction confirmed', {
-        txHash: receipt.hash,
-        blockNumber: receipt.blockNumber
+      logger.info('Mint transaction confirmed on UC Chain', {
+        ucTxHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+        status: receipt.status === 1 ? 'Success' : 'Failed'
       });
 
       // Mark as processed
       this.processedDeposits.add(depositIdStr);
 
+      logger.info('Bridge transfer completed', {
+        from: 'BSC',
+        to: 'UC Chain',
+        bscTxHash: event.transactionHash,
+        ucTxHash: receipt.hash,
+        amount: ethers.formatUnits(amount, 6),
+        recipient: destinationAddress
+      });
+
     } catch (error) {
       logger.error('Error handling BSC deposit', {
         error: error.message,
-        depositId: event.args.depositId.toString()
+        stack: error.stack,
+        depositId: event.args.depositId.toString(),
+        bscTxHash: event.transactionHash
       });
     }
   }
@@ -194,30 +214,50 @@ class BridgeRelayer {
       }
 
       logger.info('Processing UC burn', {
-        user,
+        ucUser: user,
         amount: ethers.formatUnits(amount, 6),
         burnId: burnIdStr,
         destinationAddress,
-        txHash: event.transactionHash
+        ucTxHash: event.transactionHash
       });
 
-      // Call unlock on BSC Bridge
-      const tx = await this.bscBridge.unlock(user, amount, burnId);
-      logger.info('Unlock transaction sent', { txHash: tx.hash });
+      // Call unlock on BSC Bridge with destinationAddress (not user)
+      // The BSC Bridge contract expects: unlock(address user, uint256 amount, bytes32 burnId)
+      // We need to pass the destinationAddress as the user parameter
+      const tx = await this.bscBridge.unlock(destinationAddress, amount, burnId);
+      logger.info('Unlock transaction sent to BSC', { 
+        bscTxHash: tx.hash,
+        recipient: destinationAddress,
+        amount: ethers.formatUnits(amount, 6),
+        burnId: burnIdStr
+      });
 
       const receipt = await tx.wait();
-      logger.info('Unlock transaction confirmed', {
-        txHash: receipt.hash,
-        blockNumber: receipt.blockNumber
+      logger.info('Unlock transaction confirmed on BSC', {
+        bscTxHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+        status: receipt.status === 1 ? 'Success' : 'Failed'
       });
 
       // Mark as processed
       this.processedBurns.add(burnIdStr);
 
+      logger.info('Bridge transfer completed', {
+        from: 'UC Chain',
+        to: 'BSC',
+        ucTxHash: event.transactionHash,
+        bscTxHash: receipt.hash,
+        amount: ethers.formatUnits(amount, 6),
+        recipient: destinationAddress
+      });
+
     } catch (error) {
       logger.error('Error handling UC burn', {
         error: error.message,
-        burnId: event.args.burnId.toString()
+        stack: error.stack,
+        burnId: event.args.burnId.toString(),
+        ucTxHash: event.transactionHash
       });
     }
   }

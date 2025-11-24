@@ -34,8 +34,10 @@ export default function Dashboard() {
   const [sourceChain, setSourceChain] = useState('56');
   const [destChain, setDestChain] = useState('1137');
   const [amount, setAmount] = useState('');
-  const [balance, setBalance] = useState('0');
+  const [balance, setBalance] = useState('0.00');
+  const [rawBalance, setRawBalance] = useState(0); // Store raw numeric balance for tooltip
   const [allowance, setAllowance] = useState('0');
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   
   // UI State
   const [isApproving, setIsApproving] = useState(false);
@@ -70,19 +72,80 @@ export default function Dashboard() {
     return await switchWeb3Network(targetChainId);
   };
 
-  const loadBalance = async () => {
-    if (!signer || !account) return;
+  // Helper function to format large numbers with abbreviations
+  const formatLargeNumber = (num) => {
+    // Handle invalid numbers
+    if (isNaN(num) || num === null || num === undefined) {
+      return '0.00';
+    }
+    
+    if (num >= 1000000000) {
+      // Billions - show as X.XXB
+      return (num / 1000000000).toFixed(2) + 'B';
+    } else if (num >= 1000000) {
+      // Millions - show as X.XXM
+      return (num / 1000000).toFixed(2) + 'M';
+    } else if (num >= 1000) {
+      // Thousands - show as X.XXK
+      return (num / 1000).toFixed(2) + 'K';
+    } else {
+      // Regular numbers - show as X.XX
+      return num.toFixed(2);
+    }
+  };
 
+  const loadBalance = async () => {
+    if (!signer || !account) {
+      console.log('Cannot load balance: signer or account missing');
+      setBalance('0.00');
+      return;
+    }
+
+    setIsLoadingBalance(true);
     try {
       const usdtAddress = getUSDTAddress(Number(sourceChain));
-      if (!usdtAddress) return;
+      console.log('Loading balance for chain:', sourceChain, 'USDT address:', usdtAddress);
+      
+      if (!usdtAddress) {
+        console.warn('No USDT address found for chain:', sourceChain);
+        setBalance('0.00');
+        setIsLoadingBalance(false);
+        return;
+      }
 
       const usdtContract = new ethers.Contract(usdtAddress, USDT_ABI, signer);
+      
+      // Get decimals from contract to ensure correct formatting
+      let decimals = 18; // Default to 18 (standard ERC20)
+      try {
+        decimals = await usdtContract.decimals();
+        console.log('USDT decimals:', decimals);
+      } catch (e) {
+        console.warn('Could not get decimals, using 18 as default');
+      }
+      
       const bal = await usdtContract.balanceOf(account);
-      setBalance(ethers.formatUnits(bal, 6));
+      console.log('Raw balance:', bal.toString());
+      
+      // Format with correct decimals
+      const formattedBalance = ethers.formatUnits(bal, decimals);
+      const numericBalance = parseFloat(formattedBalance);
+      
+      console.log('Formatted balance:', formattedBalance, 'Numeric:', numericBalance, 'Decimals:', decimals);
+      
+      // Store raw balance for tooltip and calculations
+      setRawBalance(numericBalance);
+      
+      // Format balance - use abbreviated format for large numbers
+      const displayBalance = formatLargeNumber(numericBalance);
+      console.log('Setting balance to:', displayBalance);
+      setBalance(displayBalance);
     } catch (error) {
       console.error('Error loading balance:', error);
-      setBalance('0');
+      console.error('Error details:', error.message, error.code);
+      setBalance('0.00');
+    } finally {
+      setIsLoadingBalance(false);
     }
   };
 
@@ -96,8 +159,17 @@ export default function Dashboard() {
       if (!usdtAddress || !bridgeAddress) return;
 
       const usdtContract = new ethers.Contract(usdtAddress, USDT_ABI, signer);
+      
+      // Get decimals from contract
+      let decimals = 18;
+      try {
+        decimals = await usdtContract.decimals();
+      } catch (e) {
+        console.warn('Could not get decimals for allowance, using 18');
+      }
+      
       const allow = await usdtContract.allowance(account, bridgeAddress);
-      setAllowance(ethers.formatUnits(allow, 6));
+      setAllowance(ethers.formatUnits(allow, decimals));
     } catch (error) {
       console.error('Error loading allowance:', error);
       setAllowance('0');
@@ -114,7 +186,16 @@ export default function Dashboard() {
       const usdtAddress = getUSDTAddress(Number(sourceChain));
       const bridgeAddress = getBridgeAddress(Number(sourceChain));
       const usdtContract = new ethers.Contract(usdtAddress, USDT_ABI, signer);
-      const amountWei = ethers.parseUnits(amount, 6);
+      
+      // Get decimals from contract
+      let decimals = 18;
+      try {
+        decimals = await usdtContract.decimals();
+      } catch (e) {
+        console.warn('Could not get decimals for approval, using 18');
+      }
+      
+      const amountWei = ethers.parseUnits(amount, decimals);
       
       const tx = await usdtContract.approve(bridgeAddress, amountWei);
       await tx.wait();
@@ -169,9 +250,20 @@ export default function Dashboard() {
     setError('');
 
     try {
+      const usdtAddress = getUSDTAddress(Number(sourceChain));
+      const usdtContract = new ethers.Contract(usdtAddress, USDT_ABI, signer);
+      
+      // Get decimals from contract
+      let decimals = 18;
+      try {
+        decimals = await usdtContract.decimals();
+      } catch (e) {
+        console.warn('Could not get decimals for bridge, using 18');
+      }
+      
       const bridgeAddress = getBridgeAddress(Number(sourceChain));
       const bridgeContract = new ethers.Contract(bridgeAddress, BRIDGE_ABI, signer);
-      const amountWei = ethers.parseUnits(amount, 6);
+      const amountWei = ethers.parseUnits(amount, decimals);
 
       // Check allowance
       if (parseFloat(allowance) < parseFloat(amount)) {
@@ -341,29 +433,53 @@ export default function Dashboard() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="flex-1 bg-slate-800/50 border border-slate-600 rounded-lg sm:rounded-xl p-3 sm:p-4 text-white text-xl sm:text-2xl font-bold focus:border-yellow-400 focus:outline-none"
+                  className="flex-1 min-w-0 bg-slate-800/50 border border-slate-600 rounded-lg sm:rounded-xl p-3 sm:p-4 text-white text-lg sm:text-xl md:text-2xl font-bold focus:border-yellow-400 focus:outline-none"
                 />
                 <div className="bg-slate-800/50 px-2 sm:px-3 md:px-4 py-3 sm:py-4 rounded-lg sm:rounded-xl flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
-                  <div className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 bg-green-500 rounded-full flex items-center justify-center">
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 bg-green-500 rounded-full flex items-center justify-center">
                     <span className="text-white text-xs sm:text-sm font-bold">$</span>
                   </div>
-                  <span className="font-bold text-sm sm:text-base md:text-lg">USDT</span>
+                  <span className="font-bold text-xs sm:text-sm md:text-base whitespace-nowrap">USDT</span>
                 </div>
               </div>
 
-              <div className="flex justify-between text-xs sm:text-sm">
+              <div className="flex justify-between text-xs sm:text-sm flex-wrap gap-1">
                 <span className="text-slate-400">Balance:</span>
-                <span className="text-green-400 font-medium">{parseFloat(balance).toFixed(2)} USDT</span>
+                <span 
+                  className="text-green-400 font-medium break-all cursor-help" 
+                  title={rawBalance >= 1000 ? `Exact: ${rawBalance.toFixed(2)} USDT` : ''}
+                >
+                  {isLoadingBalance ? (
+                    <span className="flex items-center space-x-1">
+                      <i className="fa-solid fa-spinner fa-spin"></i>
+                      <span>Loading...</span>
+                    </span>
+                  ) : (
+                    `${balance} USDT`
+                  )}
+                </span>
               </div>
             </div>
 
-            {/* Swap Button */}
+            {/* Swap Button with Arrow Icon */}
             <div className="relative flex justify-center -my-3 sm:-my-4 z-10">
               <button
                 onClick={swapChains}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform glow-yellow pulse-glow"
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform glow-yellow pulse-glow shadow-lg"
               >
-                <i className="fa-solid fa-arrow-up-down text-white text-base sm:text-lg md:text-xl"></i>
+                <svg 
+                  className="w-5 h-5 sm:w-6 sm:h-6 text-white" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2.5} 
+                    d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" 
+                  />
+                </svg>
               </button>
             </div>
 
@@ -384,20 +500,20 @@ export default function Dashboard() {
               </select>
 
               <div className="flex items-center space-x-2 sm:space-x-3 mb-3">
-                <div className="flex-1 bg-slate-800/30 border border-slate-600 rounded-lg sm:rounded-xl p-3 sm:p-4 text-slate-400 text-xl sm:text-2xl font-bold">
+                <div className="flex-1 min-w-0 bg-slate-800/30 border border-slate-600 rounded-lg sm:rounded-xl p-3 sm:p-4 text-slate-400 text-lg sm:text-xl md:text-2xl font-bold break-all">
                   {receivedAmount > 0 ? receivedAmount.toFixed(2) : '0.00'}
                 </div>
                 <div className="bg-slate-800/50 px-2 sm:px-3 md:px-4 py-3 sm:py-4 rounded-lg sm:rounded-xl flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
-                  <div className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 bg-green-500 rounded-full flex items-center justify-center">
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 bg-green-500 rounded-full flex items-center justify-center">
                     <span className="text-white text-xs sm:text-sm font-bold">$</span>
                   </div>
-                  <span className="font-bold text-sm sm:text-base md:text-lg">USDT</span>
+                  <span className="font-bold text-xs sm:text-sm md:text-base whitespace-nowrap">USDT</span>
                 </div>
               </div>
 
-              <div className="flex justify-between text-xs sm:text-sm">
+              <div className="flex justify-between text-xs sm:text-sm flex-wrap gap-1">
                 <span className="text-slate-400">You will receive:</span>
-                <span className="text-yellow-400 font-medium">≈ {receivedAmount > 0 ? receivedAmount.toFixed(2) : '0.00'} USDT</span>
+                <span className="text-yellow-400 font-medium break-all">≈ {receivedAmount > 0 ? receivedAmount.toFixed(2) : '0.00'} USDT</span>
               </div>
             </div>
           </div>
@@ -406,20 +522,20 @@ export default function Dashboard() {
           <div className="glassmorphism p-3 sm:p-4 md:p-6 rounded-xl sm:rounded-2xl mb-4 sm:mb-6">
             <h3 className="text-yellow-400 font-bold text-base sm:text-lg mb-3 sm:mb-4">Transaction Details</h3>
             <div className="space-y-2 sm:space-y-3">
-              <div className="flex justify-between text-xs sm:text-sm">
+              <div className="flex justify-between text-xs sm:text-sm flex-wrap gap-1">
                 <span className="text-slate-400">Bridge Fee (0.75%)</span>
-                <span className="font-medium">{bridgeFee.toFixed(4)} USDT</span>
+                <span className="font-medium break-all">{bridgeFee.toFixed(2)} USDT</span>
               </div>
-              <div className="flex justify-between text-xs sm:text-sm">
+              <div className="flex justify-between text-xs sm:text-sm flex-wrap gap-1">
                 <span className="text-slate-400">Estimated Time</span>
                 <div className="flex items-center space-x-1 sm:space-x-2">
                   <i className="fa-solid fa-clock text-green-400 text-xs sm:text-sm"></i>
                   <span className="text-green-400 font-medium">2-5 min</span>
                 </div>
               </div>
-              <div className="border-t border-slate-600 pt-2 sm:pt-3 flex justify-between">
+              <div className="border-t border-slate-600 pt-2 sm:pt-3 flex justify-between flex-wrap gap-1">
                 <span className="text-yellow-400 font-bold text-sm sm:text-base">You'll Receive</span>
-                <span className="text-yellow-400 font-bold text-base sm:text-lg">{receivedAmount.toFixed(2)} USDT</span>
+                <span className="text-yellow-400 font-bold text-base sm:text-lg break-all">{receivedAmount.toFixed(2)} USDT</span>
               </div>
             </div>
           </div>
@@ -544,11 +660,11 @@ export default function Dashboard() {
                 <div className="glassmorphism p-4 rounded-xl">
                   <div className="flex justify-between mb-2">
                     <span className="text-slate-400">Amount</span>
-                    <span className="font-bold text-yellow-400">{amount} USDT</span>
+                    <span className="font-bold text-yellow-400">{parseFloat(amount || 0).toFixed(2)} USDT</span>
                   </div>
                   <div className="flex justify-between mb-2">
                     <span className="text-slate-400">Bridge Fee</span>
-                    <span>{bridgeFee.toFixed(4)} USDT</span>
+                    <span>{bridgeFee.toFixed(2)} USDT</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">You'll Receive</span>
