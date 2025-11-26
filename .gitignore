@@ -48,3 +48,19 @@ backend/logs/
 
 # OS
 Thumbs.db
+
+# Kiro IDE (keep docs and scripts in repo but ignore other IDE files)
+.kiro/settings/
+.kiro/cache/
+.kiro/temp/
+
+# Helper scripts and docs (moved to .kiro folder)
+# These are development/debugging tools, not part of the main codebase
+*.debug.js
+*.test.sh
+*-temp.js
+*-backup.*
+
+# Relayer state (runtime data)
+relayer-state.json
+backend/relayer-state.json

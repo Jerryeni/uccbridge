@@ -221,23 +221,96 @@ export default function TransactionHistory() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="space-y-2 text-xs">
+                      {/* Blockchain Transaction Hashes */}
+                      {tx.blockchainTxHashes ? (
+                        <>
+                          {/* Source Chain Transaction */}
+                          <div className="bg-slate-800/50 rounded p-2">
+                            <div className="text-slate-400 mb-1 flex items-center justify-between">
+                              <span>{tx.blockchainTxHashes.type === 'deposit' ? 'Deposit TX' : 'Burn TX'} ({tx.blockchainTxHashes.sourceChain})</span>
+                              <a
+                                href={getExplorerUrl(tx.blockchainTxHashes.sourceChain === 'BSC' ? 56 : 1137, tx.blockchainTxHashes.sourceTxHash)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-400 hover:text-blue-300"
+                              >
+                                <i className="fa-solid fa-external-link-alt"></i>
+                              </a>
+                            </div>
+                            <div 
+                              className="text-white font-mono truncate cursor-pointer hover:text-yellow-400 transition-colors" 
+                              title={`${tx.blockchainTxHashes.sourceTxHash} (Click to copy)`}
+                              onClick={() => {
+                                navigator.clipboard.writeText(tx.blockchainTxHashes.sourceTxHash);
+                                alert('Transaction hash copied!');
+                              }}
+                            >
+                              {tx.blockchainTxHashes.sourceTxHash.slice(0, 12)}...{tx.blockchainTxHashes.sourceTxHash.slice(-10)}
+                              <i className="fa-solid fa-copy ml-1 text-xs"></i>
+                            </div>
+                          </div>
+
+                          {/* Destination Chain Transaction */}
+                          {tx.blockchainTxHashes.destTxHash && (
+                            <div className="bg-slate-800/50 rounded p-2">
+                              <div className="text-slate-400 mb-1 flex items-center justify-between">
+                                <span>{tx.blockchainTxHashes.type === 'deposit' ? 'Mint TX' : 'Unlock TX'} ({tx.blockchainTxHashes.destChain})</span>
+                                <a
+                                  href={getExplorerUrl(tx.blockchainTxHashes.destChain === 'BSC' ? 56 : 1137, tx.blockchainTxHashes.destTxHash)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:text-blue-300"
+                                >
+                                  <i className="fa-solid fa-external-link-alt"></i>
+                                </a>
+                              </div>
+                              <div 
+                                className="text-green-400 font-mono truncate cursor-pointer hover:text-green-300 transition-colors" 
+                                title={`${tx.blockchainTxHashes.destTxHash} (Click to copy)`}
+                                onClick={() => {
+                                  navigator.clipboard.writeText(tx.blockchainTxHashes.destTxHash);
+                                  alert('Transaction hash copied!');
+                                }}
+                              >
+                                {tx.blockchainTxHashes.destTxHash.slice(0, 12)}...{tx.blockchainTxHashes.destTxHash.slice(-10)}
+                                <i className="fa-solid fa-copy ml-1 text-xs"></i>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {/* Fallback: Internal Transaction ID */}
+                          <div className="bg-slate-800/50 rounded p-2">
+                            <div className="text-slate-400 mb-1 flex items-center justify-between">
+                              <span>Internal Transaction ID</span>
+                              <span className="text-xs text-slate-500">
+                                <i className="fa-solid fa-info-circle"></i>
+                              </span>
+                            </div>
+                            <div 
+                              className="text-white font-mono truncate cursor-pointer hover:text-yellow-400 transition-colors" 
+                              title={`${tx.transactionId} (Click to copy)`}
+                              onClick={() => {
+                                navigator.clipboard.writeText(tx.transactionId);
+                                alert('Internal transaction ID copied!');
+                              }}
+                            >
+                              {tx.transactionId.slice(0, 12)}...{tx.transactionId.slice(-10)}
+                              <i className="fa-solid fa-copy ml-1 text-xs"></i>
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1">
+                              <i className="fa-solid fa-info-circle mr-1"></i>
+                              Blockchain tx hashes not available yet
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Destination Address */}
                       <div className="bg-slate-800/50 rounded p-2">
-                        <div className="text-slate-400 mb-1">Transaction ID</div>
-                        <div 
-                          className="text-white font-mono truncate cursor-pointer hover:text-yellow-400 transition-colors" 
-                          title={`${tx.transactionId} (Click to copy)`}
-                          onClick={() => {
-                            navigator.clipboard.writeText(tx.transactionId);
-                            alert('Transaction ID copied!');
-                          }}
-                        >
-                          {tx.transactionId.slice(0, 10)}...{tx.transactionId.slice(-8)}
-                          <i className="fa-solid fa-copy ml-1 text-xs"></i>
-                        </div>
-                      </div>
-                      <div className="bg-slate-800/50 rounded p-2">
-                        <div className="text-slate-400 mb-1">Destination</div>
+                        <div className="text-slate-400 mb-1">Recipient Address</div>
                         <div 
                           className="text-white font-mono truncate cursor-pointer hover:text-yellow-400 transition-colors" 
                           title={`${tx.destinationAddress} (Click to copy)`}
@@ -246,40 +319,10 @@ export default function TransactionHistory() {
                             alert('Address copied!');
                           }}
                         >
-                          {tx.destinationAddress.slice(0, 10)}...{tx.destinationAddress.slice(-8)}
+                          {tx.destinationAddress.slice(0, 12)}...{tx.destinationAddress.slice(-10)}
                           <i className="fa-solid fa-copy ml-1 text-xs"></i>
                         </div>
                       </div>
-                    </div>
-
-                    {tx.linkedId && tx.linkedId !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
-                      <div className="mt-2 text-xs">
-                        <span className="text-slate-400">Linked TX: </span>
-                        <span 
-                          className="text-yellow-400 font-mono cursor-pointer hover:text-yellow-300 transition-colors"
-                          title={`${tx.linkedId} (Click to copy)`}
-                          onClick={() => {
-                            navigator.clipboard.writeText(tx.linkedId);
-                            alert('Linked TX copied!');
-                          }}
-                        >
-                          {tx.linkedId.slice(0, 10)}...{tx.linkedId.slice(-8)}
-                          <i className="fa-solid fa-copy ml-1 text-xs"></i>
-                        </span>
-                      </div>
-                    )}
-                    
-                    {/* View on Explorer Button */}
-                    <div className="mt-3 pt-3 border-t border-slate-600/30">
-                      <a
-                        href={getExplorerUrl(tx.sourceChain === 'BSC' ? 56 : 1137, tx.transactionId)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-400 hover:text-blue-300 inline-flex items-center space-x-1"
-                      >
-                        <i className="fa-solid fa-external-link-alt"></i>
-                        <span>View on {tx.sourceChain} Explorer</span>
-                      </a>
                     </div>
                   </div>
                 ))}

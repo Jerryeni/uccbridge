@@ -4,12 +4,11 @@ dotenv.config();
 export const config = {
   // Relayer wallet
   relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY,
-
   // RPC URLs (with backups)
-  bscRpcUrl: process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org',
+  bscRpcUrl: process.env.BSC_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545',
   bscRpcUrlBackup: process.env.BSC_RPC_URL_BACKUP || 'https://bsc-dataseed1.binance.org',
   bscRpcUrlBackup2: process.env.BSC_RPC_URL_BACKUP2 || 'https://bsc-dataseed2.binance.org',
-  bscRpcUrlBackup3: process.env.BSC_RPC_URL_BACKUP23|| 'https://data-seed-prebsc-1-s1.bnbchain.org:8545',
+  bscRpcUrlBackup3: process.env.BSC_RPC_URL_BACKUP23|| 'https://bsc-dataseed.binance.org',
   ucRpcUrl: process.env.UC_RPC_URL || 'https://rpc.mainnet.ucchain.org',
 
   // Contract addresses
