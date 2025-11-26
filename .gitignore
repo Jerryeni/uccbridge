@@ -64,4 +64,6 @@ Thumbs.db
 # Relayer state (runtime data)
 relayer-state.json
 backend/relayer-state.json
-.kiro
+
+# Kiro folder (development tools and docs - keep local only)
+.kiro/
