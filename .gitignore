@@ -64,3 +64,4 @@ Thumbs.db
 # Relayer state (runtime data)
 relayer-state.json
 backend/relayer-state.json
+.kiro
