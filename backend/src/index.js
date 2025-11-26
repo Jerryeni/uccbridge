@@ -12,9 +12,20 @@ async function main() {
     await relayer.initialize();
     await relayer.start();
 
-    // Create HTTP server for Railway health checks
+    // Create HTTP server for Railway health checks and API
     const PORT = process.env.PORT || 3001;
     const server = http.createServer((req, res) => {
+      // Enable CORS
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+
       if (req.url === '/health' || req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
@@ -23,6 +34,30 @@ async function main() {
           uptime: process.uptime(),
           timestamp: new Date().toISOString()
         }));
+      } else if (req.url.startsWith('/api/tx-hashes/')) {
+        // Extract transaction ID from URL
+        const txId = req.url.split('/api/tx-hashes/')[1];
+        
+        if (!txId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Transaction ID required' }));
+          return;
+        }
+
+        const txHashes = relayer.stateManager.getTransactionHashes(txId);
+        
+        if (txHashes) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(txHashes));
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Transaction not found' }));
+        }
+      } else if (req.url === '/api/tx-hashes') {
+        // Get all transaction hashes
+        const allHashes = relayer.stateManager.getAllTransactionHashes();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(allHashes));
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));

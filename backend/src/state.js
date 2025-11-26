@@ -37,6 +37,7 @@ export class StateManager {
       lastUcBlock: null,
       processedDeposits: [],
       processedBurns: [],
+      transactionHashes: {}, // Map of depositId/burnId -> { sourceTxHash, destTxHash }
       lastSaved: null,
       startedAt: new Date().toISOString()
     };
@@ -111,5 +112,68 @@ export class StateManager {
       lastSaved: this.state.lastSaved,
       startedAt: this.state.startedAt
     };
+  }
+
+  // Store transaction hashes for a deposit
+  addDepositTxHashes(depositId, bscTxHash, ucTxHash = null) {
+    const id = depositId.toString();
+    if (!this.state.transactionHashes) {
+      this.state.transactionHashes = {};
+    }
+    this.state.transactionHashes[id] = {
+      type: 'deposit',
+      sourceTxHash: bscTxHash,
+      destTxHash: ucTxHash,
+      sourceChain: 'BSC',
+      destChain: 'UC',
+      timestamp: Date.now()
+    };
+    this.saveState();
+    logger.debug('Stored deposit tx hashes', { depositId: id, bscTxHash, ucTxHash });
+  }
+
+  // Store transaction hashes for a burn
+  addBurnTxHashes(burnId, ucTxHash, bscTxHash = null) {
+    const id = burnId.toString();
+    if (!this.state.transactionHashes) {
+      this.state.transactionHashes = {};
+    }
+    this.state.transactionHashes[id] = {
+      type: 'burn',
+      sourceTxHash: ucTxHash,
+      destTxHash: bscTxHash,
+      sourceChain: 'UC',
+      destChain: 'BSC',
+      timestamp: Date.now()
+    };
+    this.saveState();
+    logger.debug('Stored burn tx hashes', { burnId: id, ucTxHash, bscTxHash });
+  }
+
+  // Update destination tx hash
+  updateDestTxHash(id, destTxHash) {
+    const idStr = id.toString();
+    if (!this.state.transactionHashes) {
+      this.state.transactionHashes = {};
+    }
+    if (this.state.transactionHashes[idStr]) {
+      this.state.transactionHashes[idStr].destTxHash = destTxHash;
+      this.saveState();
+      logger.debug('Updated dest tx hash', { id: idStr, destTxHash });
+    }
+  }
+
+  // Get transaction hashes by ID
+  getTransactionHashes(id) {
+    const idStr = id.toString();
+    if (!this.state.transactionHashes) {
+      return null;
+    }
+    return this.state.transactionHashes[idStr] || null;
+  }
+
+  // Get all transaction hashes
+  getAllTransactionHashes() {
+    return this.state.transactionHashes || {};
   }
 }
