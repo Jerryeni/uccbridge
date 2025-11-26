@@ -274,11 +274,27 @@ export default function Dashboard() {
       }
 
       setBridgeStep(2);
-      const tx = await bridgeContract.deposit(amountWei, account);
+      // Contract expects: deposit(uint256 amount, string destinationAddress)
+      // destinationAddress must be a STRING, not address type
+      const tx = await bridgeContract.deposit(amountWei, account.toString());
       setTxHash(tx.hash);
       
+      console.log('✅ Deposit transaction sent:', tx.hash);
+      console.log('   Amount:', ethers.formatUnits(amountWei, decimals), 'USDT');
+      console.log('   Destination:', account);
+      
       setBridgeStep(3);
-      await tx.wait();
+      console.log('⏳ Waiting for BSC confirmation...');
+      const receipt = await tx.wait();
+      
+      console.log('✅ BSC transaction confirmed!');
+      console.log('   Block:', receipt.blockNumber);
+      console.log('   Status:', receipt.status === 1 ? 'Success' : 'Failed');
+      console.log('   Gas Used:', receipt.gasUsed.toString());
+      
+      if (receipt.status !== 1) {
+        throw new Error('Transaction failed on BSC');
+      }
       
       setBridgeStep(4);
       setTimeout(() => {
@@ -286,10 +302,25 @@ export default function Dashboard() {
         setBridgeStep(0);
         setAmount('');
         loadBalance();
+        
+        // Show success message
+        alert('✅ Deposit successful! Your USDT will be credited on UC Chain within 20-30 seconds.');
       }, 2000);
     } catch (error) {
-      console.error('Bridge error:', error);
-      setError('Bridge failed: ' + (error.reason || error.message));
+      console.error('❌ Bridge error:', error);
+      
+      let errorMessage = 'Bridge failed: ';
+      if (error.code === 'ACTION_REJECTED') {
+        errorMessage = 'Transaction rejected in MetaMask';
+      } else if (error.message.includes('insufficient funds')) {
+        errorMessage = 'Insufficient BNB for gas fees';
+      } else if (error.message.includes('user rejected')) {
+        errorMessage = 'You rejected the transaction';
+      } else {
+        errorMessage += (error.reason || error.message);
+      }
+      
+      setError(errorMessage);
       setShowProgressModal(false);
       setBridgeStep(0);
     }

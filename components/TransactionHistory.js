@@ -1,10 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { ethers } from 'ethers';
 import { useWeb3 } from '../contexts/Web3Context';
+import { getAllUserTransactions } from '../lib/transactionService';
+import { getExplorerUrl } from '../lib/contracts';
 
 export default function TransactionHistory() {
   const { isConnected, account, chainId, connectWallet } = useWeb3();
   const [error, setError] = useState('');
+  const [transactions, setTransactions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [filter, setFilter] = useState('all'); // all, pending, completed, failed
+
+  // Load transactions when wallet is connected
+  useEffect(() => {
+    if (isConnected && account) {
+      loadTransactions();
+    }
+  }, [isConnected, account]);
 
   const handleConnect = async () => {
     try {
@@ -15,6 +28,59 @@ export default function TransactionHistory() {
       setError('Failed to connect wallet');
     }
   };
+
+  const loadTransactions = async () => {
+    if (!account) return;
+    
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      // Create providers for both chains
+      const bscProvider = new ethers.JsonRpcProvider('https://bsc-dataseed.binance.org');
+      const ucProvider = new ethers.JsonRpcProvider('https://rpc.mainnet.ucchain.org');
+      
+      // Fetch transactions from both chains
+      const txs = await getAllUserTransactions(bscProvider, ucProvider, account, 30);
+      setTransactions(txs);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+      setError('Failed to load transactions. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return 'text-green-400 bg-green-400/20';
+      case 'pending':
+        return 'text-yellow-400 bg-yellow-400/20';
+      case 'failed':
+        return 'text-red-400 bg-red-400/20';
+      default:
+        return 'text-slate-400 bg-slate-400/20';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return 'fa-check-circle';
+      case 'pending':
+        return 'fa-clock';
+      case 'failed':
+        return 'fa-times-circle';
+      default:
+        return 'fa-question-circle';
+    }
+  };
+
+  const filteredTransactions = transactions.filter(tx => {
+    if (filter === 'all') return true;
+    return tx.status.toLowerCase() === filter;
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 text-white p-3 sm:p-4 md:p-6 lg:p-8">
@@ -78,29 +144,189 @@ export default function TransactionHistory() {
               </div>
             </div>
 
-            {/* Empty State */}
-            <div className="text-center py-8 sm:py-12 md:py-16">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
-                <i className="fa-solid fa-clock-rotate-left text-3xl sm:text-4xl md:text-5xl text-slate-500"></i>
-              </div>
-              <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-300 mb-2">No Transactions Yet</h3>
-              <p className="text-xs sm:text-sm md:text-base text-slate-400 mb-1 px-4">
-                Transaction history will be loaded from the blockchain
-              </p>
-              <p className="text-xs sm:text-sm text-slate-500 px-4">
-                This feature is being enhanced with real blockchain data
-              </p>
-              
-              {/* Quick Actions */}
-              <div className="mt-6 sm:mt-8">
-                <Link href="/">
-                  <button className="px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-slate-900 font-bold text-xs sm:text-sm rounded-lg hover:from-yellow-500 hover:to-orange-600 transition-all">
-                    <i className="fa-solid fa-bridge mr-2"></i>
-                    Make Your First Bridge
-                  </button>
-                </Link>
-              </div>
+            {/* Filter Tabs */}
+            <div className="flex items-center space-x-2 mb-4 sm:mb-6 overflow-x-auto pb-2">
+              {[
+                { key: 'all', label: 'All', icon: 'fa-list' },
+                { key: 'completed', label: 'Completed', icon: 'fa-check-circle' },
+                { key: 'pending', label: 'Pending', icon: 'fa-clock' },
+                { key: 'failed', label: 'Failed', icon: 'fa-times-circle' }
+              ].map(({ key, label, icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                    filter === key
+                      ? 'bg-yellow-400 text-slate-900'
+                      : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  <i className={`fa-solid ${icon} mr-1 sm:mr-2`}></i>
+                  {label}
+                </button>
+              ))}
+              <button
+                onClick={loadTransactions}
+                disabled={isLoading}
+                className="ml-auto px-3 sm:px-4 py-2 bg-slate-700/50 text-slate-400 rounded-lg text-xs sm:text-sm hover:bg-slate-700 transition-all disabled:opacity-50"
+              >
+                <i className={`fa-solid fa-refresh mr-1 sm:mr-2 ${isLoading ? 'fa-spin' : ''}`}></i>
+                Refresh
+              </button>
             </div>
+
+            {/* Loading State */}
+            {isLoading && (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-slate-400">Loading transactions from blockchain...</p>
+              </div>
+            )}
+
+            {/* Transactions List */}
+            {!isLoading && filteredTransactions.length > 0 && (
+              <div className="space-y-3 sm:space-y-4">
+                {filteredTransactions.map((tx, index) => (
+                  <div
+                    key={tx.transactionId || index}
+                    className="bg-slate-700/30 rounded-lg p-3 sm:p-4 border border-slate-600/30 hover:border-yellow-400/30 transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <i className="fa-solid fa-exchange-alt text-white text-sm sm:text-base"></i>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <span className="font-bold text-white text-sm sm:text-base truncate">
+                              {tx.type || 'Bridge Transfer'}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(tx.status)} flex items-center space-x-1 flex-shrink-0`}>
+                              <i className={`fa-solid ${getStatusIcon(tx.status)}`}></i>
+                              <span>{tx.status}</span>
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-400 truncate">
+                            {tx.sourceChain} → {tx.destinationChain}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <div className="font-bold text-yellow-400 text-sm sm:text-base whitespace-nowrap">
+                          {parseFloat(tx.amount).toFixed(2)} USDT
+                        </div>
+                        <div className="text-xs text-slate-400 whitespace-nowrap">
+                          {tx.date}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div className="bg-slate-800/50 rounded p-2">
+                        <div className="text-slate-400 mb-1">Transaction ID</div>
+                        <div 
+                          className="text-white font-mono truncate cursor-pointer hover:text-yellow-400 transition-colors" 
+                          title={`${tx.transactionId} (Click to copy)`}
+                          onClick={() => {
+                            navigator.clipboard.writeText(tx.transactionId);
+                            alert('Transaction ID copied!');
+                          }}
+                        >
+                          {tx.transactionId.slice(0, 10)}...{tx.transactionId.slice(-8)}
+                          <i className="fa-solid fa-copy ml-1 text-xs"></i>
+                        </div>
+                      </div>
+                      <div className="bg-slate-800/50 rounded p-2">
+                        <div className="text-slate-400 mb-1">Destination</div>
+                        <div 
+                          className="text-white font-mono truncate cursor-pointer hover:text-yellow-400 transition-colors" 
+                          title={`${tx.destinationAddress} (Click to copy)`}
+                          onClick={() => {
+                            navigator.clipboard.writeText(tx.destinationAddress);
+                            alert('Address copied!');
+                          }}
+                        >
+                          {tx.destinationAddress.slice(0, 10)}...{tx.destinationAddress.slice(-8)}
+                          <i className="fa-solid fa-copy ml-1 text-xs"></i>
+                        </div>
+                      </div>
+                    </div>
+
+                    {tx.linkedId && tx.linkedId !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
+                      <div className="mt-2 text-xs">
+                        <span className="text-slate-400">Linked TX: </span>
+                        <span 
+                          className="text-yellow-400 font-mono cursor-pointer hover:text-yellow-300 transition-colors"
+                          title={`${tx.linkedId} (Click to copy)`}
+                          onClick={() => {
+                            navigator.clipboard.writeText(tx.linkedId);
+                            alert('Linked TX copied!');
+                          }}
+                        >
+                          {tx.linkedId.slice(0, 10)}...{tx.linkedId.slice(-8)}
+                          <i className="fa-solid fa-copy ml-1 text-xs"></i>
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* View on Explorer Button */}
+                    <div className="mt-3 pt-3 border-t border-slate-600/30">
+                      <a
+                        href={getExplorerUrl(tx.sourceChain === 'BSC' ? 56 : 1137, tx.transactionId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-400 hover:text-blue-300 inline-flex items-center space-x-1"
+                      >
+                        <i className="fa-solid fa-external-link-alt"></i>
+                        <span>View on {tx.sourceChain} Explorer</span>
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!isLoading && filteredTransactions.length === 0 && (
+              <div className="text-center py-8 sm:py-12 md:py-16">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
+                  <i className="fa-solid fa-clock-rotate-left text-3xl sm:text-4xl md:text-5xl text-slate-500"></i>
+                </div>
+                <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-300 mb-2">
+                  {filter === 'all' ? 'No Completed Transactions' : `No ${filter.charAt(0).toUpperCase() + filter.slice(1)} Transactions`}
+                </h3>
+                <p className="text-xs sm:text-sm md:text-base text-slate-400 mb-1 px-4">
+                  Only completed blockchain transactions are shown here
+                </p>
+                
+                {/* Important Notice */}
+                <div className="mt-4 mx-auto max-w-md bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-left">
+                  <div className="flex items-start space-x-2">
+                    <i className="fa-solid fa-info-circle text-yellow-400 mt-1"></i>
+                    <div className="text-xs sm:text-sm text-slate-300">
+                      <p className="font-semibold mb-1">Important:</p>
+                      <p>If you just made a deposit, check your MetaMask for:</p>
+                      <ul className="list-disc ml-4 mt-2 space-y-1">
+                        <li>Pending transactions (wait for confirmation)</li>
+                        <li>Failed transactions (try again)</li>
+                        <li>Rejected transactions (approve in MetaMask)</li>
+                      </ul>
+                      <p className="mt-2">Transactions appear here only after blockchain confirmation (~20 seconds).</p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Quick Actions */}
+                <div className="mt-6 sm:mt-8">
+                  <Link href="/">
+                    <button className="px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-slate-900 font-bold text-xs sm:text-sm rounded-lg hover:from-yellow-500 hover:to-orange-600 transition-all">
+                      <i className="fa-solid fa-bridge mr-2"></i>
+                      Make a Bridge Transfer
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            )}
 
             {/* Info Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-6">

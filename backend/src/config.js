@@ -5,8 +5,11 @@ export const config = {
   // Relayer wallet
   relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY,
 
-  // RPC URLs
-  bscRpcUrl: process.env.BSC_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545',
+  // RPC URLs (with backups)
+  bscRpcUrl: process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org',
+  bscRpcUrlBackup: process.env.BSC_RPC_URL_BACKUP || 'https://bsc-dataseed1.binance.org',
+  bscRpcUrlBackup2: process.env.BSC_RPC_URL_BACKUP2 || 'https://bsc-dataseed2.binance.org',
+  bscRpcUrlBackup3: process.env.BSC_RPC_URL_BACKUP23|| 'https://data-seed-prebsc-1-s1.bnbchain.org:8545',
   ucRpcUrl: process.env.UC_RPC_URL || 'https://rpc.mainnet.ucchain.org',
 
   // Contract addresses
@@ -21,7 +24,10 @@ export const config = {
   ucChainId: parseInt(process.env.UC_CHAIN_ID || '1137'),
 
   // Monitoring settings
-  pollInterval: parseInt(process.env.POLL_INTERVAL || '15000'),
+  pollInterval: parseInt(process.env.POLL_INTERVAL || '5000'),
+  maxBlocksPerQuery: parseInt(process.env.MAX_BLOCKS_PER_QUERY || '500'),
+  catchUpPollInterval: parseInt(process.env.CATCH_UP_POLL_INTERVAL || '1000'),
+  realtimeEnabled: process.env.REALTIME_ENABLED !== 'false',
   startBlockBsc: process.env.START_BLOCK_BSC || 'latest',
   startBlockUc: process.env.START_BLOCK_UC || 'latest',
 
